@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "threadpool.h"
 #include "list.h"
@@ -17,6 +18,19 @@ static llist_t *the_list = NULL;
 
 static int thread_count = 0, data_count = 0, max_cut = 0;
 static tpool_t *pool = NULL;
+
+static double diff_in_second(struct timespec t1, struct timespec t2)
+{
+    struct timespec diff;
+    if (t2.tv_nsec-t1.tv_nsec < 0) {
+        diff.tv_sec  = t2.tv_sec - t1.tv_sec - 1;
+        diff.tv_nsec = t2.tv_nsec - t1.tv_nsec + 1000000000;
+    } else {
+        diff.tv_sec  = t2.tv_sec - t1.tv_sec;
+        diff.tv_nsec = t2.tv_nsec - t1.tv_nsec;
+    }
+    return (diff.tv_sec + diff.tv_nsec / 1000000000.0);
+}
 
 llist_t *merge_list(llist_t *a, llist_t *b)
 {
@@ -146,6 +160,11 @@ int main(int argc, char const *argv[])
         printf(USAGE);
         return -1;
     }
+
+    struct timespec start, end;
+    double cpu_time;
+
+
     thread_count = atoi(argv[1]);
     data_count = atoi(argv[2]);
     max_cut = thread_count * (thread_count <= data_count) +
@@ -153,6 +172,8 @@ int main(int argc, char const *argv[])
 
     /* Read data */
     the_list = list_new();
+
+    clock_gettime(CLOCK_REALTIME, &start);
 
     /* FIXME: remove all all occurrences of printf and scanf
      * in favor of automated test flow.
@@ -176,6 +197,12 @@ int main(int argc, char const *argv[])
     _task->func = cut_func;
     _task->arg = the_list;
     tqueue_push(pool->queue, _task);
+
+    clock_gettime(CLOCK_REALTIME, &end);
+    cpu_time = diff_in_second(start, end);
+    FILE *fp = fopen("runtime", "a+");
+    fprintf(fp, "%d %lf\n", thread_count, cpu_time);
+    fclose(fp);
 
     /* release thread pool */
     tpool_free(pool);
